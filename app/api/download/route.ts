@@ -3,12 +3,14 @@ import { create } from 'youtube-dl-exec';
 import path from 'path';
 import fs from 'fs';
 
-// สั่งให้ระบบใช้ yt-dlp ตัวใหม่ล่าสุดที่เราเพิ่งติดตั้งใน Docker
 const youtubedl = create('/usr/local/bin/yt-dlp');
 
 export async function POST(req: Request) {
-  const { url, format } = await req.json();
+  let { url, format } = await req.json();
   if (!url) return NextResponse.json({ error: 'No URL' }, { status: 400 });
+
+  // ตัดพารามิเตอร์ขยะที่ YouTube ชอบใส่มาแอบติดตาม (เช่น ?si=...) ทิ้งไป เพื่อลดโอกาสโดนบล็อก
+  url = url.split('?')[0]; 
 
   const downloadDir = path.join(process.cwd(), 'public', 'downloads');
   if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir, { recursive: true });
@@ -21,7 +23,9 @@ export async function POST(req: Request) {
     const options: any = {
       noWarnings: true,
       noCallHome: true,
-      forceIpv4: true, // สำคัญมาก: บังคับใช้ IPv4 หลบการโดนบล็อกจาก YouTube
+      forceIpv4: true,
+      // ท่าไม้ตายหลบ IP แบน: ปลอมตัวว่าคนกำลังกดดูจากแอปมือถือ Android ไม่ใช่เซิร์ฟเวอร์
+      extractorArgs: 'youtube:player_client=android,web', 
       output: filePath,
     };
 
@@ -29,7 +33,6 @@ export async function POST(req: Request) {
       options.extractAudio = true;
       options.audioFormat = 'mp3';
     } else {
-      // ป้องกันการโหลดคลิปยาวเกิน 20 นาที (1200 วินาที)
       options.matchFilter = 'duration <= 1200'; 
       options.format = 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
       options.mergeOutputFormat = 'mp4';
@@ -42,7 +45,6 @@ export async function POST(req: Request) {
       fileName: `YTDL_by_witty.${ext}` 
     });
 
-    // ลบไฟล์ทิ้งหลังจากส่งให้ดาวน์โหลด 60 วินาที
     setTimeout(() => {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
@@ -50,8 +52,9 @@ export async function POST(req: Request) {
     }, 60000); 
 
     return response;
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: 'Failed or Video Too Long' }, { status: 500 });
+  } catch (error: any) {
+    // ดึงข้อความ Error จริงๆ จากระบบหลังบ้านมาแสดง จะได้ไม่ต้องงมหาแบบรอบที่แล้ว
+    console.error("YT-DLP ERROR:", error.stderr || error.message || error);
+    return NextResponse.json({ error: 'Failed or Blocked by YouTube' }, { status: 500 });
   }
 }
