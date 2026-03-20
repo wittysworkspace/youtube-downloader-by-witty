@@ -40,16 +40,19 @@ export async function POST(req: Request) {
 
     await youtubedl(url, options);
 
+   // ของเดิม: downloadUrl: `/downloads/${serverFileName}`
+    // ให้แก้เป็นบรรทัดนี้แทน:
     const response = NextResponse.json({ 
-      downloadUrl: `/downloads/${serverFileName}`, 
+      downloadUrl: `/api/file?name=${serverFileName}`, 
       fileName: `YTDL_by_witty.${ext}` 
     });
 
+    // เปลี่ยนตัวเลข 60000 ด้านล่างสุดเป็น 600000
     setTimeout(() => {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
-    }, 60000); 
+    }, 600000);
 
     return response;
   } catch (error: any) {
